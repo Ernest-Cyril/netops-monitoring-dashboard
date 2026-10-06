@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load netops_tags %}
+{% block title %}{{ asset.name }}{% endblock %}
+
+{% block content %}
+<a href="{% url 'monitoring:dashboard' %}" class="back-link"><i class="bi bi-arrow-left"></i> Back to dashboard</a>
+
+<div class="d-flex flex-wrap align-items-center gap-3 mt-3 mb-4">
+  <h1 class="page-title mb-0">{{ asset.name }}</h1>
+  <span class="status-badge status-badge-lg status-{{ asset.status|lower }}">{{ asset.get_status_display }}</span>
+</div>
+
+<div class="row g-3 mb-4">
+  <!-- Identity -->
+  <div class="col-lg-4">
+    <section class="noc-panel h-100">
+      <div class="panel-header"><h2 class="panel-title"><i class="bi bi-info-circle"></i> Asset Information</h2></div>
+      <dl class="detail-list p-3 mb-0">
+        <dt>Asset Type</dt><dd>{{ asset.get_asset_type_display }}</dd>
+        <dt>Location</dt><dd>{{ asset.location }}</dd>
+        <dt>IP Address</dt><dd class="mono">{{ asset.ip_address }}</dd>
+        <dt>Reachability</dt><dd>{% if asset.is_reachable %}Reachable{% else %}<span class="text-danger">Unreachable</span>{% endif %}</dd>
+        <dt>Last Checked</dt><dd>{{ asset.last_checked|date:"d M Y, H:i:s" }}</dd>
+        <dt>Added</dt><dd>{{ asset.created_at|date:"d M Y" }}</dd>
+      </dl>
+    </section>
+  </div>
+
+  <!-- Metrics -->
+  <div class="col-lg-8">
+    <section class="noc-panel h-100">
+      <div class="panel-header"><h2 class="panel-title"><i class="bi bi-activity"></i> Current Metrics</h2>
+        <span class="text-secondary small">simulated telemetry</span></div>
+      <div class="row g-3 p-3">
+        <div class="col-6 col-md-3"><div class="metric-tile metric-{{ asset.cpu_usage|metric_level:'CPU' }}">
+          <div class="kpi-label">CPU Usage</div>
+          <div class="metric-value">{% if asset.cpu_usage is not None %}{{ asset.cpu_usage|floatformat:1 }}%{% else %}—{% endif %}</div>
+          <div class="kpi-sub">warn ≥70 · crit &gt;85</div></div></div>
+        <div class="col-6 col-md-3"><div class="metric-tile metric-{{ asset.memory_usage|metric_level:'MEMORY' }}">
+          <div class="kpi-label">Memory Usage</div>
+          <div class="metric-value">{% if asset.memory_usage is not None %}{{ asset.memory_usage|floatformat:1 }}%{% else %}—{% endif %}</div>
+          <div class="kpi-sub">warn ≥75 · crit &gt;90</div></div></div>
+        <div class="col-6 col-md-3"><div class="metric-tile metric-{{ asset.latency|metric_level:'LATENCY' }}">
+          <div class="kpi-label">Latency</div>
+          <div class="metric-value">{% if asset.latency is not None %}{{ asset.latency|floatformat:0 }} ms{% else %}—{% endif %}</div>
+          <div class="kpi-sub">warn ≥100 · crit &gt;250</div></div></div>
+        <div class="col-6 col-md-3"><div class="metric-tile metric-na">
+          <div class="kpi-label">Uptime</div>
+          <div class="metric-value">{{ asset.uptime|floatformat:2 }}%</div>
+          <div class="kpi-sub">last 30 days</div></div></div>
+      </div>
+      {% if not asset.has_compute_metrics and asset.is_reachable %}
+        <p class="text-secondary small px-3 mb-3">CPU and memory are not applicable to this asset type; only latency is monitored.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+<!-- Rule-based recommendation for the CURRENT state -->
+<section class="noc-panel mb-4">
+  <div class="panel-header"><h2 class="panel-title"><i class="bi bi-lightbulb"></i> Recommended Action (rule-based)</h2></div>
+  <div class="p-3">
+    {% for rec in recommendations %}
+      <div class="recommendation-box rec-{{ rec.level|lower }} mb-2">
+        <strong>{{ rec.title }}</strong> — {{ rec.text }}
+      </div>
+    {% empty %}
+      <p class="mb-0 text-secondary"><i class="bi bi-shield-check text-success"></i> All metrics are within thresholds. No action required.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- Incident history for this asset -->
+<section class="noc-panel">
+  <div class="panel-header"><h2 class="panel-title"><i class="bi bi-clock-history"></i> Incidents for this Asset</h2>
+    <span class="count-pill">{{ incidents|length }}</span></div>
+  {% include "monitoring/_incident_table.html" with incidents=incidents show_actions=True show_asset=False next_url=request.path %}
+</section>
+{% endblock %}

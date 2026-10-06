@@ -1,0 +1,54 @@
+{% comment %}
+Reusable incident table (used on the dashboard and on the asset detail page).
+Parameters: incidents, show_actions, show_asset, next_url
+{% endcomment %}
+{% if incidents %}
+<div class="table-responsive">
+  <table class="table noc-table align-middle mb-0">
+    <thead>
+      <tr>
+        <th>ID</th>{% if show_asset %}<th>Asset</th>{% endif %}<th>Severity</th><th>Title</th>
+        <th>Status</th><th>Created</th><th style="min-width:260px">Recommended Action</th>
+        {% if show_actions %}<th class="text-end">Actions</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for incident in incidents %}
+      <tr>
+        <td class="mono">{{ incident.reference }}</td>
+        {% if show_asset %}<td><a class="asset-link" href="{{ incident.asset.get_absolute_url }}">{{ incident.asset.name }}</a></td>{% endif %}
+        <td><span class="status-badge status-{{ incident.severity|lower }}">{{ incident.get_severity_display }}</span></td>
+        <td>
+          <div class="fw-semibold">{{ incident.title }}</div>
+          <div class="text-secondary small">{{ incident.description }}</div>
+        </td>
+        <td><span class="incident-status istatus-{{ incident.status|lower }}">{{ incident.get_status_display }}</span>
+          {% if incident.resolved_at %}<div class="text-secondary small">{{ incident.resolved_at|date:"d M H:i:s" }}</div>{% endif %}</td>
+        <td class="text-secondary small">{{ incident.created_at|date:"d M H:i:s" }}</td>
+        <td class="small recommendation">{{ incident.recommended_action }}</td>
+        {% if show_actions %}
+        <td class="text-end">
+          <div class="d-inline-flex gap-1">
+            {% if incident.status == "OPEN" %}
+            <form method="post" action="{% url 'monitoring:incident_investigate' incident.pk %}">
+              {% csrf_token %}<input type="hidden" name="next" value="{{ next_url }}">
+              <button class="btn btn-sm btn-investigate" type="submit"><i class="bi bi-search"></i> Mark as Investigating</button>
+            </form>
+            {% endif %}
+            {% if incident.status != "RESOLVED" %}
+            <form method="post" action="{% url 'monitoring:incident_resolve' incident.pk %}">
+              {% csrf_token %}<input type="hidden" name="next" value="{{ next_url }}">
+              <button class="btn btn-sm btn-resolve" type="submit"><i class="bi bi-check-lg"></i> Resolve</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <p class="text-secondary mb-0 p-3"><i class="bi bi-shield-check text-success"></i> No active incidents. All clear.</p>
+{% endif %}

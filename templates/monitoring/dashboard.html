@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% load static netops_tags %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- ===== Page heading + action buttons ===== -->
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+  <div>
+    <h1 class="page-title mb-1">Operations Overview</h1>
+    <p class="text-secondary mb-0">Live view of simulated infrastructure health across Lagos sites.</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <form method="post" action="{% url 'monitoring:simulate_event' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-noc-primary" id="btn-simulate">
+        <i class="bi bi-lightning-charge-fill"></i> SIMULATE NETWORK EVENT
+      </button>
+    </form>
+    <form method="post" action="{% url 'monitoring:reset_demo' %}"
+          onsubmit="return confirm('Reset the demo to its original state? All incidents will be cleared.');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-noc-outline" id="btn-reset">
+        <i class="bi bi-arrow-counterclockwise"></i> RESET DEMO
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ===== KPI cards (all values calculated in views.get_kpis) ===== -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="kpi-card kpi-neutral"><div class="kpi-label">Total Assets</div>
+      <div class="kpi-value">{{ kpis.total }}</div><div class="kpi-sub">monitored</div></div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="kpi-card kpi-healthy"><div class="kpi-label">Healthy Assets</div>
+      <div class="kpi-value">{{ kpis.healthy }}</div><div class="kpi-sub">within thresholds</div></div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="kpi-card kpi-warning"><div class="kpi-label">Warning Assets</div>
+      <div class="kpi-value">{{ kpis.warning }}</div><div class="kpi-sub">needs attention</div></div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="kpi-card kpi-critical"><div class="kpi-label">Critical Assets</div>
+      <div class="kpi-value">{{ kpis.critical }}</div>
+      <div class="kpi-sub">{{ kpis.offline }} offline</div></div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="kpi-card kpi-incident"><div class="kpi-label">Active Incidents</div>
+      <div class="kpi-value">{{ kpis.active_incidents }}</div><div class="kpi-sub">open + investigating</div></div>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="kpi-card kpi-uptime"><div class="kpi-label">Average Uptime</div>
+      <div class="kpi-value">{{ kpis.avg_uptime }}<span class="kpi-unit">%</span></div><div class="kpi-sub">last 30 days</div></div>
+  </div>
+</div>
+
+<!-- ===== Infrastructure health table ===== -->
+<section class="noc-panel mb-4" id="infrastructure">
+  <div class="panel-header">
+    <h2 class="panel-title"><i class="bi bi-hdd-network"></i> Infrastructure Health</h2>
+    <span class="text-secondary small">Thresholds — CPU ≥70% warn / &gt;85% crit · Memory ≥75% / &gt;90% · Latency ≥100 ms / &gt;250 ms</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table noc-table align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Asset Name</th><th>Type</th><th>Location</th><th>IP Address</th><th>Status</th>
+          <th class="text-end">CPU</th><th class="text-end">Memory</th><th class="text-end">Latency</th>
+          <th class="text-end">Uptime</th><th>Last Checked</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for asset in assets %}
+        <tr class="row-{{ asset.status|lower }}">
+          <td><a class="asset-link" href="{{ asset.get_absolute_url }}">{{ asset.name }}</a></td>
+          <td class="text-secondary">{{ asset.get_asset_type_display }}</td>
+          <td>{{ asset.location }}</td>
+          <td class="mono">{{ asset.ip_address }}</td>
+          <td><span class="status-badge status-{{ asset.status|lower }}">{{ asset.get_status_display }}</span></td>
+          <td class="text-end mono metric-{{ asset.cpu_usage|metric_level:'CPU' }}">{% if asset.cpu_usage is not None %}{{ asset.cpu_usage|floatformat:0 }}%{% else %}—{% endif %}</td>
+          <td class="text-end mono metric-{{ asset.memory_usage|metric_level:'MEMORY' }}">{% if asset.memory_usage is not None %}{{ asset.memory_usage|floatformat:0 }}%{% else %}—{% endif %}</td>
+          <td class="text-end mono metric-{{ asset.latency|metric_level:'LATENCY' }}">{% if asset.latency is not None %}{{ asset.latency|floatformat:0 }} ms{% else %}—{% endif %}</td>
+          <td class="text-end mono">{{ asset.uptime|floatformat:2 }}%</td>
+          <td class="text-secondary small">{{ asset.last_checked|date:"d M H:i:s" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10" class="text-center text-secondary py-4">No assets yet. Click <strong>Reset Demo</strong> to load demo infrastructure.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== Charts (data comes from Django via json_script below) ===== -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <section class="noc-panel h-100">
+      <div class="panel-header"><h2 class="panel-title"><i class="bi bi-reception-4"></i> Network Latency by Asset</h2></div>
+      <div class="chart-box"><canvas id="latencyChart" aria-label="Latency by asset chart"></canvas></div>
+    </section>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <section class="noc-panel h-100">
+      <div class="panel-header"><h2 class="panel-title"><i class="bi bi-pie-chart"></i> Status Distribution</h2></div>
+      <div class="chart-box"><canvas id="statusChart" aria-label="Status distribution chart"></canvas></div>
+    </section>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <section class="noc-panel h-100">
+      <div class="panel-header"><h2 class="panel-title"><i class="bi bi-cpu"></i> CPU by Compute Asset</h2></div>
+      <div class="chart-box"><canvas id="cpuChart" aria-label="CPU usage chart"></canvas></div>
+    </section>
+  </div>
+</div>
+
+<!-- ===== Active incidents ===== -->
+<section class="noc-panel mb-4" id="incidents">
+  <div class="panel-header">
+    <h2 class="panel-title"><i class="bi bi-exclamation-octagon"></i> Active Incidents
+      <span class="count-pill">{{ kpis.active_incidents }}</span></h2>
+    <span class="text-secondary small">Created automatically by the threshold engine · recommendations are rule-based</span>
+  </div>
+  {% include "monitoring/_incident_table.html" with incidents=active_incidents show_actions=True show_asset=True next_url=request.path|add:"#incidents" %}
+</section>
+
+<!-- ===== Recently resolved ===== -->
+<section class="noc-panel" id="resolved">
+  <div class="panel-header"><h2 class="panel-title"><i class="bi bi-check2-circle"></i> Recently Resolved</h2></div>
+  {% if resolved_incidents %}
+  <div class="table-responsive">
+    <table class="table noc-table align-middle mb-0">
+      <thead><tr><th>ID</th><th>Asset</th><th>Severity</th><th>Title</th><th>Created</th><th>Resolved</th></tr></thead>
+      <tbody>
+      {% for incident in resolved_incidents %}
+        <tr>
+          <td class="mono">{{ incident.reference }}</td>
+          <td><a class="asset-link" href="{{ incident.asset.get_absolute_url }}">{{ incident.asset.name }}</a></td>
+          <td><span class="status-badge status-{{ incident.severity|lower }}">{{ incident.get_severity_display }}</span></td>
+          <td>{{ incident.title }}</td>
+          <td class="text-secondary small">{{ incident.created_at|date:"d M H:i:s" }}</td>
+          <td class="text-secondary small">{{ incident.resolved_at|date:"d M H:i:s" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="text-secondary mb-0 p-3">No incidents resolved yet.</p>
+  {% endif %}
+</section>
+
+{{ chart_data|json_script:"chart-data" }}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}

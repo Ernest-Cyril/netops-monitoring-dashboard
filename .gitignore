@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables / secrets
+.env
+*.env
+
+# Django
+*.log
+staticfiles/
+media/
+
+# SQLite database: NOT committed. Recreate it any time with:
+#   python manage.py migrate
+#   python manage.py seed_demo
+db.sqlite3
+db.sqlite3-journal
+
+# Local helper output and one-off local scripts
+logs/
+_local_*
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

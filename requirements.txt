@@ -1,0 +1,4 @@
+# Django 4.2 LTS is installed automatically on Python 3.8/3.9;
+# Django 5.2 LTS on Python 3.10+. The NetOps code supports both.
+Django>=4.2,<5.3
+tzdata>=2024.1
