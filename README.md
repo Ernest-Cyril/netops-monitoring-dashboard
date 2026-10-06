@@ -39,6 +39,8 @@ NetOps stores every asset and its latest metrics in a database. A **rule-based m
 | Simulate Network Event | Randomly degrades 1–2 assets (Warning / Critical / Offline / recovery); every event includes at least one problem |
 | Reset Demo | Restores the original 8 assets, metrics and 2 starting incidents; numbering restarts at INC-0001 |
 | Charts (Chart.js) | Network Latency by Asset, Infrastructure Status Distribution, CPU by Compute Asset, all using live database data |
+| Notifications | Every action shows a floating notification (bottom-left) that is visible wherever the page is scrolled and closes itself after 12 seconds |
+| Works offline | Bootstrap, Bootstrap Icons, Chart.js and the Inter / JetBrains Mono fonts are bundled locally, with no CDN or internet needed |
 | Django Admin | Assets and incidents with list columns, filters, search and inline incident history |
 | Tests | 22 automated Django tests covering thresholds, incidents, duplicates, lifecycle, simulation and reset |
 
@@ -47,8 +49,10 @@ NetOps stores every asset and its latest metrics in a database. A **rule-based m
 - **Python 3.9+**: application language
 - **Django** (4.2 LTS on Python 3.9; 5.2 LTS on Python 3.10+): web framework, ORM, admin, templates
 - **SQLite**: file-based database (`db.sqlite3`)
-- **Bootstrap 5 + Bootstrap Icons**: responsive layout and components (CDN)
-- **Chart.js 4**: charts (CDN)
+- **Bootstrap 5 + Bootstrap Icons**: responsive layout and components (stored locally in `static/vendor`)
+- **Chart.js 4**: charts (stored locally in `static/vendor`)
+
+All front-end libraries and fonts are bundled in the project, so **NetOps runs with no internet connection**.
 - **HTML / CSS / vanilla JavaScript**: templates, NOC theme, chart rendering
 
 No Docker, Redis, Celery, Node.js, external APIs or paid services.
@@ -153,7 +157,8 @@ monitoring/               Django APP
   management/commands/seed_demo.py   `python manage.py seed_demo [--reset]`
   migrations/             Database schema history
 templates/                base.html, monitoring/dashboard.html, asset_detail.html, _incident_table.html
-static/                   css/styles.css (NOC theme), js/dashboard.js (Chart.js)
+static/                   css/styles.css (NOC theme), css/fonts.css, js/dashboard.js (Chart.js)
+  vendor/                 Local copies of Bootstrap 5.3.3, Bootstrap Icons 1.11.3, Chart.js 4.4.4, fonts
 ```
 
 ## Future Improvements

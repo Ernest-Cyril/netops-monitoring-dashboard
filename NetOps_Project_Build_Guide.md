@@ -104,7 +104,7 @@ A NOC is a team (often a room full of screens) that monitors an organisation's n
 | **SQLite** | A database stored in a single file | Zero setup, built into Python, perfect for a prototype | `db.sqlite3` stores assets and incidents |
 | **HTML** | The structure of web pages | Every web page needs it | `templates/*.html` |
 | **CSS** | Styles (colours, spacing, layout) | Gives the dark NOC look | `static/css/styles.css` |
-| **Bootstrap 5** | A CSS framework of ready-made components (grid, tables, alerts, buttons) | Professional, responsive layout quickly | Grid, tables, alerts and buttons in all templates (loaded from a CDN) |
+| **Bootstrap 5** | A CSS framework of ready-made components (grid, tables, alerts, buttons) | Professional, responsive layout quickly | Grid, tables, alerts and buttons in all templates (stored locally in `static/vendor`) |
 | **JavaScript** | The programming language that runs in the browser | Needed to draw charts | `static/js/dashboard.js` |
 | **Chart.js** | A JavaScript charting library | Simple, good-looking charts with little code | Latency bar chart, status doughnut, CPU bar chart |
 
@@ -127,7 +127,7 @@ A NOC is a team (often a room full of screens) that monitors an organisation's n
 ```
 
 - The **browser never talks to SQLite directly**. Only Django does, through the **ORM** (Object-Relational Mapper), which turns Python code like `InfrastructureAsset.objects.all()` into SQL like `SELECT * FROM monitoring_infrastructureasset`.
-- **Bootstrap and Chart.js** are loaded from a **CDN** (Content Delivery Network, jsdelivr.net), so the laptop needs internet access the first time the page loads. NetOps itself still runs locally.
+- **Bootstrap, Bootstrap Icons, Chart.js and the fonts are stored inside the project** in `static/vendor/` and served by Django like our own CSS and JS. The page makes **no requests to the internet**, so NetOps works with Wi-Fi switched off. (They were first loaded from a CDN, a Content Delivery Network; see Problem 5 in Phase 18 for why that changed.)
 
 ---
 
@@ -256,7 +256,13 @@ NetOps — Network & Infrastructure Monitoring Dashboard/
 │       └── _incident_table.html
 └── static/
     ├── css/styles.css
-    └── js/dashboard.js
+    ├── css/fonts.css            ← @font-face rules for the local fonts
+    ├── js/dashboard.js
+    └── vendor/                  ← local copies of third-party libraries
+        ├── bootstrap/           (bootstrap.min.css, bootstrap.bundle.min.js, v5.3.3)
+        ├── bootstrap-icons/     (bootstrap-icons.min.css + fonts/, v1.11.3)
+        ├── chartjs/             (chart.umd.min.js, v4.4.4)
+        └── fonts/               (Inter 400–700, JetBrains Mono 400/600, .woff2)
 ```
 (`venv/`, `db.sqlite3` and `logs/` are created on your laptop but not committed.)
 
@@ -671,10 +677,10 @@ The dashboard view is **read-only**. Refreshing the page does **not** run the en
 ## Phase 11 — Building the Dashboard Interface
 
 ### `templates/base.html`: the shared layout
-- Loads Bootstrap 5, Bootstrap Icons and Google Fonts (Inter, JetBrains Mono) from CDNs, plus our `styles.css`.
+- Loads Bootstrap 5, Bootstrap Icons, our `fonts.css` (Inter and JetBrains Mono) and our `styles.css`, all **from `static/`** with `{% static '...' %}`. Nothing is loaded from the internet.
 - `data-bs-theme="dark"` turns on Bootstrap's dark mode.
 - **Navbar:** NETOPS logo and title, the subtitle "Network & Infrastructure Monitoring", a pulsing **DEMO ENVIRONMENT** pill, and an Admin link.
-- **Messages:** loops over Django's flash messages and shows each as a dismissible Bootstrap alert (`alert-success`, `alert-warning`, `alert-danger`, `alert-info`).
+- **Messages (floating notifications):** loops over Django's flash messages and shows each as a dismissible Bootstrap alert (`alert-success`, `alert-warning`, `alert-danger`, `alert-info`) inside a `.message-stack` container that is **fixed to the bottom-left of the screen** (`position: fixed` in `styles.css`). Because it floats, the notification is visible even when the page reopens scrolled down to the incidents table (`#incidents`) after Investigate or Resolve. It sits at the bottom-left so it never covers the Simulate/Reset buttons (top-right) or the Resolve buttons (right). A small script closes the notifications automatically after **12 seconds**; the X closes them at once.
 - `{% block content %}` is where each page inserts its own content. This is **template inheritance**: write the layout once, reuse it everywhere.
 - Footer disclaimer: "All infrastructure, metrics and incidents are fictional, simulated demo data."
 
@@ -932,6 +938,10 @@ Django creates a **separate temporary test database** for each run, so tests nev
 | Reset Demo → 8/6/2/0/2, IDs back to INC-0001/0002 | ✅ |
 | Django Admin login, asset list with filters, incident list | ✅ |
 | Static CSS/JS load, no broken links | ✅ |
+| **Offline check:** all 14 page requests served from `127.0.0.1`; 0 external requests; fonts, icons and all 3 charts load | ✅ |
+| **Notifications:** visible bottom-left after Simulate, Investigate and Resolve (even when the page jumps to `#incidents`); auto-close after 12 s | ✅ |
+| Simulate escalation seen live: Backup Server Warning → Critical, INC-0001 escalated (no duplicate) | ✅ |
+| 22/22 tests re-run after these changes | ✅ |
 
 ### Problems encountered: Problem → Cause → Fix → Result
 1. **Django would not install.**
@@ -945,6 +955,16 @@ Django creates a **separate temporary test database** for each run, so tests nev
    - *Fix:* `_restart_incident_numbering()` clears the incident entry in `sqlite_sequence` during reset. Added a test assertion.
    - *Result:* every reset starts at INC-0001.
 3. **Message wording.** The simulation banner said "cpu rose to…". Fixed to "CPU rose to…".
+4. **Confirmation messages were off-screen.**
+   - *Problem:* after Mark as Investigating or Resolve, the confirmation message wasn't visible.
+   - *Cause:* those buttons redirect back to `/#incidents`, so the browser scrolls down to the incident table, while the message was printed at the **top** of the page.
+   - *Fix:* messages now render in a `.message-stack` container fixed to the **bottom-left** of the screen (CSS `position: fixed`), with a 12-second auto-close script in `base.html`.
+   - *Result:* every action's message is visible wherever the page is scrolled.
+5. **The app needed internet for its styling and charts.**
+   - *Problem:* Bootstrap, Bootstrap Icons, Chart.js and Google Fonts were loaded from CDNs, so with no internet the dashboard would lose its styling and charts.
+   - *Cause:* external `<link>` and `<script>` URLs in `base.html` and `dashboard.html`.
+   - *Fix:* downloaded the exact versions (Bootstrap 5.3.3, Bootstrap Icons 1.11.3, Chart.js 4.4.4, Inter and JetBrains Mono from Fontsource) into `static/vendor/` on the laptop. Added `static/css/fonts.css` with `@font-face` rules, switched the templates to `{% static %}` paths, and removed the source-map comments (which would cause harmless 404s in the browser's developer tools).
+   - *Result:* the browser's network log shows every request going to `127.0.0.1` and **zero** external requests.
 
 > Tip: if the server window shows an error, read the **last line** of the traceback first. It usually names the file and line.
 
@@ -1045,7 +1065,7 @@ Every arrow is real code, and every state is saved in SQLite.
 | "no such table" | `python manage.py migrate` then `python manage.py seed_demo` |
 | Dashboard empty / odd state | Click **RESET DEMO** (or `python manage.py seed_demo --reset`) |
 | "Port 8000 is already in use" | A server is already running in another window: use that, or close it |
-| Charts/styling missing | The CDN needs internet the first time. Check your connection |
+| Charts/styling missing | Press **CTRL + F5** to hard-refresh. Check that `static\vendor\` exists (it's in Git). No internet is needed |
 
 ### Fresh computer (rebuild from Git)
 ```powershell
@@ -1206,7 +1226,7 @@ For each question: **B** = beginner-friendly explanation, **T** = technically ac
 7. **No metric history:** only the *current* value of each metric is stored, so there are no trend charts.
 8. **Not deployed:** it runs on the local development server (`runserver`), which is not a production server; `DEBUG` is on.
 9. **No audit trail:** it doesn't record *who* investigated or resolved an incident.
-10. **CDN dependency:** Bootstrap and Chart.js load from the internet.
+10. **Library updates are manual:** Bootstrap, Chart.js and the fonts are stored at fixed versions in `static/vendor`. Updating them means downloading new files (the local helper `_local_download_vendor.bat` does this).
 11. **Editing metrics in Admin doesn't re-evaluate status** until the next Simulate or Reset.
 12. **Django 4.2 on this laptop:** Python 3.9 limits Django to 4.2 LTS, whose support has ended. Upgrading Python to 3.12 would install the supported Django 5.2 LTS with no code changes.
 
@@ -1287,7 +1307,9 @@ For each question: **B** = beginner-friendly explanation, **T** = technically ac
 | `templates/monitoring/dashboard.html` | Main dashboard | GET `/` |
 | `templates/monitoring/asset_detail.html` | Asset page | GET `/assets/<id>/` |
 | `templates/monitoring/_incident_table.html` | Reusable incident table | Dashboard + asset pages |
-| `static/css/styles.css` | Theme | Every page |
+| `static/css/styles.css` | Theme + floating notification position | Every page |
+| `static/css/fonts.css` | Local font definitions | Every page |
+| `static/vendor/` | Local Bootstrap, Bootstrap Icons, Chart.js, fonts (works offline) | Every page |
 | `static/js/dashboard.js` | Charts | Dashboard |
 | `requirements.txt` | Dependencies | `pip install -r` |
 | `setup_netops.bat` / `start_netops.bat` | One-click setup / start | Double-click |
@@ -1339,6 +1361,7 @@ After an action, the view adds a **flash message** and **redirects** (Post/Redir
 - **Where the logic lives:** `monitoring/services.py`.
 - **Safety:** POST-only actions + CSRF, `json_script`, `format_html` escaping, transactions.
 - **Tests:** 22, all passing.
+- **Works offline:** all libraries and fonts are bundled in `static/vendor`, so Wi-Fi problems can't break the demo.
 - **Honesty:** simulated data, not AI, not production, no background polling, no dashboard login.
 - **Future:** SNMP / Prometheus → same engine; PostgreSQL; scheduled workers; alerts; auth/RBAC; Docker; cloud.
 - **Starting state:** 8 assets, 6 healthy, 2 warning, 2 incidents (INC-0001 Backup Server latency, INC-0002 Cloud Node 02 CPU), average uptime 99.92%.
